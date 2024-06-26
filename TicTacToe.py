@@ -3,11 +3,17 @@
 # If Tkinter is < 8.6, update Python to > 3.9.8
 # Import NamedTuple module for data storage
 # Import cycle from itertools
-
+import os
 import tkinter as tk
 from tkinter import font
 from typing import NamedTuple
 from itertools import cycle
+
+# Import OpenAI as Chatbot for move response
+import openai
+
+# Import python-dotenv variable to hide API Key
+from dotenv import load_dotenv
 
 # Define Player class
 class Player(NamedTuple):
@@ -25,7 +31,7 @@ class Move(NamedTuple):
     label: str = ""
 
 # Defines constant variables and assigns player symbols
-BOARD_SIZE = 5
+BOARD_SIZE = 3
 DEFAULT_PLAYERS = (
     Player(label="X", color="blue"),
     Player(label="O", color="red")
@@ -186,6 +192,7 @@ class Board(tk.Tk):
                 self.Game.toggle_player()
                 msg = f"{self.Game.current_player.label}'s turn"
                 self.update_display(msg)
+                print(self.Game.current_moves)
 
 
     # Generate display
@@ -271,6 +278,25 @@ class Board(tk.Tk):
             button.config(text='')
             button.config(fg='white')
 
+    instructions = f"I will give you a raw code output of the status of a standard {BOARD_SIZE} by {BOARD_SIZE} Tic-Tac-Toe Game.
+        For example, for a standard 3 by 3 tictactoe game, the formatting will be something like this to represent the first row:
+         '[[Move(row=0, col=0, label='X'), Move(row=0, col=1, label='O'), Move(row=0, col=2, label='')]'. This represents the first
+         row of the board. From the left to the right, there is an X, followed by an O, followed by an empty (unplayed) space. 
+         Your job is to act as the other player (you will go second). You will take the symbol that has not been played (X or O). 
+         You may only play a move on an empty square. Your job is to win the tic-tac-toe game by connecting three of your symbol in a row.
+         You will do this by outputting the full code I send you, and adding your symbol under one of the `Move(row=0, col=0, label='')` in 
+         the 'label=' lists I send you."
+
+    def BotMove(board, player_label)
+        prompt = f'{Board.instructions}\n\nRaw Code output: {Board.play.Game.current_moves}'
+
+        response = openai.Completion.create(
+            engine = 'text-davinci-003',
+            prompt = prompt,
+        )
+        move = response.choices[0].text.strip()
+        row, col = map(int,move.split())
+
 
 
 # Defines `main()` function to create instance of Board()
@@ -281,5 +307,10 @@ def main():
     # Create GUI loop
     board.mainloop()
 
+# Ensure local app running only
 if __name__ == "__main__":
     main()
+
+# Need to create a .env file and put it in .gitignore
+openai.api_key = os.getenv("OPENAI_KEY")
+
