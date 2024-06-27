@@ -14,6 +14,10 @@ import openai
 
 # Import python-dotenv variable to hide API Key
 from dotenv import load_dotenv
+load_dotenv()
+
+# Need to create a .env file and put it in .gitignore
+openai.api_key = os.getenv("OPENAI_KEY")
 
 # Define Player class
 class Player(NamedTuple):
@@ -193,6 +197,7 @@ class Board(tk.Tk):
                 msg = f"{self.Game.current_player.label}'s turn"
                 self.update_display(msg)
                 print(self.Game.current_moves)
+                self.BotMove()
 
 
     # Generate display
@@ -277,25 +282,46 @@ class Board(tk.Tk):
             button.config(highlightbackground='lightblue')
             button.config(text='')
             button.config(fg='white')
+    
+    instructions = f'I will give you a raw code output of the status of a standard {BOARD_SIZE} by {BOARD_SIZE} Tic-Tac-Toe Game. For example, for a standard 3 by 3 tictactoe game, the formatting will be something like this to represent the first row: "[[Move(row=0, col=0, label=\'X\'), Move(row=0, col=1, label=\'O\'), Move(row=0, col=2, label=\'\')]]". This represents the first row of the board. From the left to the right, there is an X, followed by an O, followed by an empty (unplayed) space. Your job is to act as the other player (you will go second). You will take the symbol that has not been played (X or O). You may only play a move on an empty square. Your job is to win the tic-tac-toe game by connecting three of your symbol in a row. You will do this by outputting ONLY 3 things, all separated by a whitespace: `row (number), column (number), and symbol (X or O).` It does not matter if we are several moves in and there can be no winner. you must keep playing valid moves. You should always try to win.'
+    
+    # Defines ChatGPT Function for playing with a robot
+    def BotMove(self):
+        prompt = [{"role": "system", "content": f'{Board.instructions} Here is the Raw Code output: {self.Game.current_moves}'}]
 
-    instructions = f"I will give you a raw code output of the status of a standard {BOARD_SIZE} by {BOARD_SIZE} Tic-Tac-Toe Game.
-        For example, for a standard 3 by 3 tictactoe game, the formatting will be something like this to represent the first row:
-         '[[Move(row=0, col=0, label='X'), Move(row=0, col=1, label='O'), Move(row=0, col=2, label='')]'. This represents the first
-         row of the board. From the left to the right, there is an X, followed by an O, followed by an empty (unplayed) space. 
-         Your job is to act as the other player (you will go second). You will take the symbol that has not been played (X or O). 
-         You may only play a move on an empty square. Your job is to win the tic-tac-toe game by connecting three of your symbol in a row.
-         You will do this by outputting the full code I send you, and adding your symbol under one of the `Move(row=0, col=0, label='')` in 
-         the 'label=' lists I send you."
-
-    def BotMove(board, player_label)
-        prompt = f'{Board.instructions}\n\nRaw Code output: {Board.play.Game.current_moves}'
-
-        response = openai.Completion.create(
-            engine = 'text-davinci-003',
-            prompt = prompt,
+        response = openai.chat.completions.create(
+            model = 'gpt-3.5-turbo',
+            messages = prompt,
         )
-        move = response.choices[0].text.strip()
-        row, col = map(int,move.split())
+        bot_response = response.choices[0].message.content.strip()
+        row, col, label = bot_response.split()
+        row, col = int(row), int(col)
+        print(row, col, label)
+        move = Move(row=row, col=col, label=label)
+
+        self.Game.current_moves[row][col] = move
+        print("response received!")
+
+        # Update button in GUI for visual representation of bot's move
+        button = next(
+            button for button, (r, c) in self.cells.items() if r == row and c == col
+        )
+        self.update_button(button)
+
+        # Process the bot's move in the game logic
+        self.Game.process_move(move)
+
+        # Check game status after bot's move
+        if self.Game.tied():
+            self.update_display(msg="Tied Game!", color="green")
+        elif self.Game.winner():
+            msg = f'Player "{self.Game.current_player.label}" won!'
+            color = self.Game.current_player.color
+            self.update_display(msg, color)
+        else:
+            self.Game.toggle_player()
+            msg = f"{self.Game.current_player.label}'s turn"
+            self.update_display(msg)
 
 
 
@@ -311,6 +337,4 @@ def main():
 if __name__ == "__main__":
     main()
 
-# Need to create a .env file and put it in .gitignore
-openai.api_key = os.getenv("OPENAI_KEY")
 
