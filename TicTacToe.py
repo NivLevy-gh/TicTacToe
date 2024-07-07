@@ -9,15 +9,16 @@ from tkinter import font
 from typing import NamedTuple
 from itertools import cycle
 
-# Import OpenAI as Chatbot for move response
-import openai
+# Import Gemini as Chatbot for move response
+import google.generativeai as genai
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 # Import python-dotenv variable to hide API Key
 from dotenv import load_dotenv
 load_dotenv()
 
 # Need to create a .env file and put it in .gitignore
-openai.api_key = os.getenv("OPENAI_KEY")
+genai.configure(api_key = os.getenv("GEMINI_KEY"))
 
 # Define Player class
 class Player(NamedTuple):
@@ -151,6 +152,8 @@ class Board(tk.Tk):
         self.CreateDisplay()
         # Initialize Grid
         self.CreateGrid()
+        # Initialize Bot vs Bot
+        self.after(1000, self.Bot_vs_Bot)
     
     # Defines menu
     def Menu(self):
@@ -167,37 +170,6 @@ class Board(tk.Tk):
         # Add options to exit and file dropdown
         file_menu.add_command(label="Exit", command=quit)
         menu_bar.add_cascade(label="file", menu=file_menu)
-
-    # Defines `play` infinite loop
-    def play(self, event):
-        # Retrieves clicked button widget
-        click = event.widget
-        # Collects row/column coordinates of button clicked
-        row, col = self.cells[click]
-        move = Move(row, col, self.Game.current_player.label)
-        # Checks to see if move was valid
-        if self.Game.valid_move(move):
-            self.update_button(click)
-            self.Game.process_move(move)
-            # Print "Tied Game!" message if tied game
-            if self.Game.tied():
-                # Tied message
-                self.update_display(msg="Tied Game!", color="green")
-            # Print "Player 1/2 Won!" message if Player 1/2 won
-            elif self.Game.winner():
-                # Highlight winning cells
-                self.highlight_cells()
-                # Winning message/color
-                msg = f'Player "{self.Game.current_player.label}" won!'
-                color = self.Game.current_player.color
-                self.update_display(msg, color)
-            # Or else keep playing
-            else:
-                self.Game.toggle_player()
-                msg = f"{self.Game.current_player.label}'s turn"
-                self.update_display(msg)
-                print(self.Game.current_moves)
-                self.BotMove()
 
 
     # Generate display
@@ -239,9 +211,10 @@ class Board(tk.Tk):
                     highlightbackground = "lightblue",
                 )
                 # Adds all (9) buttons to the self.cells dictionary
-                self.cells[button] = (row,col)
+                self.cells[(row, col)] = button
+                
                 # Binds button to `click` widget for def(play) above
-                button.bind("<ButtonPress-1>", self.play)
+                # button.bind("<ButtonPress-1>", self.BotMove)
                 # Adds all (9) buttons to grid (main window)
                 button.grid(
                     row = row,
@@ -252,10 +225,11 @@ class Board(tk.Tk):
                 )
     
     # Defines grid button update function
-    def update_button(self, click):
+    def update_button(self, row, col, move):
+        button = self.cells[(row, col)]
         # Sets clicked grid's label and color to that of current player
-        click.config(text=self.Game.current_player.label)
-        click.config(fg=self.Game.current_player.color)
+        button.config(text=move.label)
+        button.config(fg=self.Game.current_player.color)
 
     # Define display update function
     def update_display(self, msg, color="black"):
@@ -278,23 +252,29 @@ class Board(tk.Tk):
         self.Game.reset_game()
         # Resets GUI and board 
         self.update_display(msg="Ready?")
-        for button in self.cells.keys():
+        for button in self.cells.values():
             button.config(highlightbackground='lightblue')
             button.config(text='')
             button.config(fg='white')
+        self.after(1000, self.Bot_vs_Bot)
     
-    instructions = f'I will give you a raw code output of the status of a standard {BOARD_SIZE} by {BOARD_SIZE} Tic-Tac-Toe Game. For example, for a standard 3 by 3 tictactoe game, the formatting will be something like this to represent the first row: "[[Move(row=0, col=0, label=\'X\'), Move(row=0, col=1, label=\'O\'), Move(row=0, col=2, label=\'\')]]". This represents the first row of the board. From the left to the right, there is an X, followed by an O, followed by an empty (unplayed) space. Your job is to act as the other player (you will go second). You will take the symbol that has not been played (X or O). You may only play a move on an empty square. Your job is to win the tic-tac-toe game by connecting three of your symbol in a row. You will do this by outputting ONLY 3 things, all separated by a whitespace: `row (number), column (number), and symbol (X or O).` It does not matter if we are several moves in and there can be no winner. you must keep playing valid moves. You should always try to win.'
+    instructions = f'''I will give you a raw code output of the status of a standard {BOARD_SIZE} by {BOARD_SIZE} Tic-Tac-Toe Game.
+                    For example, for a standard 3 by 3 tictactoe game, the formatting will be something like this to represent the first row: 
+                    [[Move(row=0, col=0, label=\"X\"), Move(row=0, col=1, label=\"O\"), Move(row=0, col=2, label=\"\")]]. 
+                    This represents the first row of the board. From the left to the right, there is an X, followed by an O, followed by an empty (unplayed) space. 
+                    Your job is to simulate both sides of a RANDOM tic tac toe game, both X and O. 
+                    You cannot play a move that has already been played (label =! "\"), and by outputting ONLY 3 things, all separated by a whitespace: 
+                    `row (number), column (number), and symbol.` It does not matter if we are several moves in and there can be no winner. 
+                    you must keep playing valid moves. You should always try to win.'''
     
     # Defines ChatGPT Function for playing with a robot
     def BotMove(self):
-        prompt = [{"role": "system", "content": f'{Board.instructions} Here is the Raw Code output: {self.Game.current_moves}'}]
+        # Prompting Gemini API
+        prompt =  f'{Board.instructions} Here is the Raw Code output: {self.Game.current_moves} Play this symbol: {self.Game.current_player.label}'
 
-        response = openai.chat.completions.create(
-            model = 'gpt-3.5-turbo',
-            messages = prompt,
-        )
-        bot_response = response.choices[0].message.content.strip()
-        row, col, label = bot_response.split()
+        # Sending out the API Request
+        bot_response = model.generate_content(f'{prompt}')
+        row, col, label = bot_response.text.split()
         row, col = int(row), int(col)
         print(row, col, label)
         move = Move(row=row, col=col, label=label)
@@ -303,10 +283,7 @@ class Board(tk.Tk):
         print("response received!")
 
         # Update button in GUI for visual representation of bot's move
-        button = next(
-            button for button, (r, c) in self.cells.items() if r == row and c == col
-        )
-        self.update_button(button)
+        self.update_button(row, col, move)
 
         # Process the bot's move in the game logic
         self.Game.process_move(move)
@@ -318,11 +295,18 @@ class Board(tk.Tk):
             msg = f'Player "{self.Game.current_player.label}" won!'
             color = self.Game.current_player.color
             self.update_display(msg, color)
+            self.highlight_cells()
         else:
             self.Game.toggle_player()
             msg = f"{self.Game.current_player.label}'s turn"
             self.update_display(msg)
+            
+            # Syntax in Tkinter to delay a function is adding the function without the ()
+            self.after(1000, self.BotMove)
+            
 
+    def Bot_vs_Bot(self):
+        self.BotMove()
 
 
 # Defines `main()` function to create instance of Board()
