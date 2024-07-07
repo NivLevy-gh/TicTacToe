@@ -3,13 +3,18 @@
 # If Tkinter is < 8.6, update Python to > 3.9.8
 # Import NamedTuple module for data storage
 # Import cycle from itertools
+# Import random number generator
 import os
 import tkinter as tk
 from tkinter import font
 from typing import NamedTuple
 from itertools import cycle
+import random
 
-# Import Gemini as Chatbot for move response
+# Import OpenAI as Chatbot for move response
+import openai
+
+# Import Gemini 
 import google.generativeai as genai
 model = genai.GenerativeModel('gemini-1.5-flash')
 
@@ -18,7 +23,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Need to create a .env file and put it in .gitignore
+openai.api_key = os.getenv("OPENAI_KEY")
 genai.configure(api_key = os.getenv("GEMINI_KEY"))
+
 
 # Define Player class
 class Player(NamedTuple):
@@ -171,7 +178,6 @@ class Board(tk.Tk):
         file_menu.add_command(label="Exit", command=quit)
         menu_bar.add_cascade(label="file", menu=file_menu)
 
-
     # Generate display
     def CreateDisplay(self):
         # Create `Frame` object to hold display
@@ -212,9 +218,8 @@ class Board(tk.Tk):
                 )
                 # Adds all (9) buttons to the self.cells dictionary
                 self.cells[(row, col)] = button
-                
+
                 # Binds button to `click` widget for def(play) above
-                # button.bind("<ButtonPress-1>", self.BotMove)
                 # Adds all (9) buttons to grid (main window)
                 button.grid(
                     row = row,
@@ -259,18 +264,17 @@ class Board(tk.Tk):
         self.after(1000, self.Bot_vs_Bot)
     
     instructions = f'''I will give you a raw code output of the status of a standard {BOARD_SIZE} by {BOARD_SIZE} Tic-Tac-Toe Game.
-                    For example, for a standard 3 by 3 tictactoe game, the formatting will be something like this to represent the first row: 
-                    [[Move(row=0, col=0, label=\"X\"), Move(row=0, col=1, label=\"O\"), Move(row=0, col=2, label=\"\")]]. 
-                    This represents the first row of the board. From the left to the right, there is an X, followed by an O, followed by an empty (unplayed) space. 
-                    Your job is to simulate both sides of a RANDOM tic tac toe game, both X and O. 
-                    You cannot play a move that has already been played (label =! "\"), and by outputting ONLY 3 things, all separated by a whitespace: 
-                    `row (number), column (number), and symbol.` It does not matter if we are several moves in and there can be no winner. 
-                    you must keep playing valid moves. You should always try to win.'''
+                    Your job is to play with a human player. I will tell you what side you need to play as. 
+                    You cannot play a move that has already been played by your opponent. 
+                    To play your optimal next move, output ONLY 3 things, all separated by a whitespace: 
+                    `row number (0, 1, or 2), column number (0, 1, or 2), and symbol (X or O)`. Do NOT say anything else in your response. 
+                    It does not matter if we are several moves in and there can be no winner. 
+                    you must keep playing valid moves. You should always try to win and block your opponent's moves as well.'''
     
-    # Defines ChatGPT Function for playing with a robot
-    def BotMove(self):
+    # Defines Gemini Agent Function
+    def BotMoveGemini(self):
         # Prompting Gemini API
-        prompt =  f'{Board.instructions} Here is the Raw Code output: {self.Game.current_moves} Play this symbol: {self.Game.current_player.label}'
+        prompt =  f'{Board.instructions} Here is the Raw Code output: {self.Game.current_moves} Play this symbol: {self.Game.current_player.label}. you must play smarter than your opponent. Do not let them get three symbols iin a row, column, or diagonal.'
 
         # Sending out the API Request
         bot_response = model.generate_content(f'{prompt}')
@@ -300,13 +304,62 @@ class Board(tk.Tk):
             self.Game.toggle_player()
             msg = f"{self.Game.current_player.label}'s turn"
             self.update_display(msg)
-            
             # Syntax in Tkinter to delay a function is adding the function without the ()
-            self.after(1000, self.BotMove)
+            self.after(1000, self.BotMoveGPT)
+            
+
+    # Defines ChatGPT Agent Function 
+    def BotMoveGPT(self):
+        prompt = [{"role": "system", "content": f'{Board.instructions} Here is the Raw Code output: {self.Game.current_moves} Play this symbol: {self.Game.current_player.label}'}]
+
+        response = openai.chat.completions.create(
+            model = 'gpt-3.5-turbo',
+            messages = prompt,
+        )
+        bot_response = response.choices[0].message.content.strip()
+        print(bot_response)
+        row, col, label = bot_response.split()
+        row, col = int(row), int(col)
+        print(row, col, label)
+        move = Move(row=row, col=col, label=label)
+
+        self.Game.current_moves[row][col] = move
+        print("response received!")
+
+        # Update button in GUI for visual representation of bot's move
+        self.update_button(row, col, move)
+
+        # Process the bot's move in the game logic
+        self.Game.process_move(move)
+
+        # Check game status after bot's move
+        if self.Game.tied():
+            self.update_display(msg="Tied Game!", color="green")
+        elif self.Game.winner():
+            msg = f'Player "{self.Game.current_player.label}" won!'
+            color = self.Game.current_player.color
+            self.update_display(msg, color)
+            self.highlight_cells()
+        else:
+            self.Game.toggle_player()
+            msg = f"{self.Game.current_player.label}'s turn"
+            self.update_display(msg)
+            # Syntax in Tkinter to delay a function is adding the function without the ()
+            self.after(1000, self.BotMoveGemini)
             
 
     def Bot_vs_Bot(self):
-        self.BotMove()
+        # Create random function to decide between GPT and Gemini
+        coinflip = random.randint(0,1)
+
+        # Heads = Gemini Agent starts
+        if coinflip == 0:
+            self.BotMoveGemini()
+            print("hello it's a 0")
+        # Tails = GPT Agent starts
+        if coinflip == 1:
+            self.BotMoveGPT()
+            print("Hello it's a 1")
 
 
 # Defines `main()` function to create instance of Board()
