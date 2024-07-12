@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import font
 from typing import NamedTuple
 from itertools import cycle
+import math
 
 # Import OpenAI as Chatbot for move response
 import openai
@@ -132,6 +133,56 @@ class Game:
         # Reset played X/O's, winner of previous match goes first
         self.winner_combo = []
 
+    # Minimax algorithm
+    def minimax(self, depth, is_maximizing):
+        if self.winner():
+            return 1 if self.current_player.label == 'O' else -1
+        if self.tied():
+            return 0
+
+        if is_maximizing:
+            best_score = -math.inf
+            for row in range(self.board_size):
+                for col in range(self.board_size):
+                    if self.current_moves[row][col].label == "":
+                        self.current_moves[row][col] = Move(row, col, 'O')
+                        self.current_player = Player(label='X', color='blue')
+                        score = self.minimax(depth + 1, False)
+                        self.current_moves[row][col] = Move(row, col)
+                        self.current_player = Player(label='O', color='red')
+                        best_score = max(score, best_score)
+            return best_score
+        else:
+            best_score = math.inf
+            for row in range(self.board_size):
+                for col in range(self.board_size):
+                    if self.current_moves[row][col].label == "":
+                        self.current_moves[row][col] = Move(row, col, 'X')
+                        self.current_player = Player(label='O', color='red')
+                        score = self.minimax(depth + 1, True)
+                        self.current_moves[row][col] = Move(row, col)
+                        self.current_player = Player(label='X', color='blue')
+                        best_score = min(score, best_score)
+            return best_score
+
+    # Find the best move
+    def best_move(self):
+        best_score = -math.inf
+        move = None
+        for row in range(self.board_size):
+            for col in range(self.board_size):
+                if self.current_moves[row][col].label == "":
+                    self.current_moves[row][col] = Move(row, col, 'O')
+                    self.current_player = Player(label='X', color='blue')
+                    score = self.minimax(0, False)
+                    self.current_moves[row][col] = Move(row, col)
+                    self.current_player = Player(label='O', color='red')
+                    if score > best_score:
+                        best_score = score
+                        move = Move(row=row, col=col, label='O')
+        return move
+
+
 
 
 # Defining the TicTacToe board class
@@ -197,7 +248,7 @@ class Board(tk.Tk):
                 msg = f"{self.Game.current_player.label}'s turn"
                 self.update_display(msg)
                 print(self.Game.current_moves)
-                self.BotMove()
+                self.BotMoveOptimal()
 
 
     # Generate display
@@ -323,6 +374,36 @@ class Board(tk.Tk):
             msg = f"{self.Game.current_player.label}'s turn"
             self.update_display(msg)
 
+    def BotMoveOptimal(self):
+        # Get the best move for the bot
+        move = self.Game.best_move()
+
+        # Make the move
+        if move:
+            row, col, label = move.row, move.col, move.label
+            print(row, col, label)
+
+            self.Game.current_moves[row][col] = move
+            print("Optimal move response received!")
+
+            # Update button in GUI for visual representation of bot's move
+            self.update_button(row, col, move)
+
+            # Process the bot's move in the game logic
+            self.Game.process_move(move)
+
+            # Check game status after bot's move
+            if self.Game.tied():
+                self.update_display(msg="Tied Game!", color="green")
+            elif self.Game.winner():
+                msg = f'Player "{self.Game.current_player.label}" won!'
+                color = self.Game.current_player.color
+                self.update_display(msg, color)
+                self.highlight_cells()
+            else:
+                self.Game.toggle_player()
+                msg = f"{self.Game.current_player.label}'s turn"
+                self.update_display(msg)
 
 
 # Defines `main()` function to create instance of Board()
