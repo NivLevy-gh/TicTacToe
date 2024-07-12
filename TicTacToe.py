@@ -334,16 +334,27 @@ class Board(tk.Tk):
             button.config(text='')
             button.config(fg='white')
     
-    instructions = f'I will give you a raw code output of the status of a standard {BOARD_SIZE} by {BOARD_SIZE} Tic-Tac-Toe Game. For example, for a standard 3 by 3 tictactoe game, the formatting will be something like this to represent the first row: "[[Move(row=0, col=0, label=\'X\'), Move(row=0, col=1, label=\'O\'), Move(row=0, col=2, label=\'\')]]". This represents the first row of the board. From the left to the right, there is an X, followed by an O, followed by an empty (unplayed) space. Your job is to act as the other player (you will go second). You will take the symbol that has not been played (X or O). You may only play a move on an empty square. Your job is to win the tic-tac-toe game by connecting three of your symbol in a row. You will do this by outputting ONLY 3 things, all separated by a whitespace: `row (number), column (number), and symbol (X or O).` It does not matter if we are several moves in and there can be no winner. you must keep playing valid moves. You should always try to win.'
+    instructions = f'I will give you a raw code output of the status of a standard {BOARD_SIZE} by {BOARD_SIZE} Tic-Tac-Toe Game.\
+        For example, for a standard 3 by 3 tictactoe game, the formatting will be something like this to represent the first row: \
+            "[[Move(row=0, col=0, label=\'X\'), Move(row=0, col=1, label=\'O\'), Move(row=0, col=2, label=\'\')]]". \
+            From the left to the right, there is an X, followed by an O, followed by an empty (unplayed) space. \
+            Your job is to act as the other player (you will go second).\ You will take the symbol that has not been played (X or O).\
+            You may only play a move on an empty square. Your job is to win the tic-tac-toe game by connecting three of your symbol in a row. \
+            You will do this by outputting ONLY 3 things, all separated by a whitespace: `row (number), column (number), and symbol (X or O).`\
+            It does not matter if we are several moves in and there can be no winner. You must keep playing valid moves, always trying to win.'
     
     # Defines ChatGPT Function for playing with a robot
     def BotMove(self):
-        prompt = [{"role": "system", "content": f'{Board.instructions} Here is the Raw Code output: {self.Game.current_moves}'}]
-
+        # Creating the 'question' to ask the API
+        prompt = [{"role": "system", "content": f'{Board.instructions}\
+                Here is the Raw Code output: {self.Game.current_moves}'}]
+        # Submitting API request 
         response = openai.chat.completions.create(
             model = 'gpt-3.5-turbo',
             messages = prompt,
         )
+        # Stripping the API response
+        # Assigning it into existing `row`, `col`, and `label` variables
         bot_response = response.choices[0].message.content.strip()
         row, col, label = bot_response.split()
         row, col = int(row), int(col)
