@@ -102,6 +102,11 @@ class Game:
                 self.has_winner = True
                 self.winner_combo = combo
                 break
+    
+    def undo_move(self, move):
+        # Undo moves
+        row, col = move.row, move.col
+        self.current_moves[row][col] = Move(row, col)
 
     # Defines and returns `has_winner` Boolean
     def winner(self):
@@ -133,56 +138,61 @@ class Game:
         # Reset played X/O's, winner of previous match goes first
         self.winner_combo = []
 
-    # Minimax algorithm
-    def minimax(self, depth, is_maximizing):
-        if self.winner():
-            return 1 if self.current_player.label == 'O' else -1
-        if self.tied():
+    def minimax(self, board, depth, maximizing_player, alpha, beta):
+        if board.winner():
+            return -1 if maximizing_player else 1
+        elif board.tied():
             return 0
-
-        if is_maximizing:
-            best_score = -math.inf
-            for row in range(self.board_size):
-                for col in range(self.board_size):
-                    if self.current_moves[row][col].label == "":
-                        self.current_moves[row][col] = Move(row, col, 'O')
-                        self.current_player = Player(label='X', color='blue')
-                        score = self.minimax(depth + 1, False)
-                        self.current_moves[row][col] = Move(row, col)
-                        self.current_player = Player(label='O', color='red')
-                        best_score = max(score, best_score)
-            return best_score
+        
+        if maximizing_player:
+            max_eval = -math.inf
+            for move in self.available_moves(board):
+                board.process_move(move)
+                eval = self.minimax(board, depth + 1, False, alpha, beta)
+                board.process_move(Move(row=move.row, col=move.col))
+                max_eval = max(max_eval, eval)
+                alpha = max(alpha, eval)
+                if beta <= alpha:
+                    break
+            return max_eval
         else:
-            best_score = math.inf
-            for row in range(self.board_size):
-                for col in range(self.board_size):
-                    if self.current_moves[row][col].label == "":
-                        self.current_moves[row][col] = Move(row, col, 'X')
-                        self.current_player = Player(label='O', color='red')
-                        score = self.minimax(depth + 1, True)
-                        self.current_moves[row][col] = Move(row, col)
-                        self.current_player = Player(label='X', color='blue')
-                        best_score = min(score, best_score)
-            return best_score
+            min_eval = math.inf
+            for move in self.available_moves(board):
+                board.process_move(move)
+                eval = self.minimax(board, depth + 1, True, alpha, beta)
+                board.process_move(Move(row=move.row, col=move.col))
+                min_eval = min(min_eval, eval)
+                beta = min(beta, eval)
+                if beta <= alpha:
+                    break
+            return min_eval
 
-    # Find the best move
-    def best_move(self):
-        best_score = -math.inf
-        move = None
-        for row in range(self.board_size):
-            for col in range(self.board_size):
-                if self.current_moves[row][col].label == "":
-                    self.current_moves[row][col] = Move(row, col, 'O')
-                    self.current_player = Player(label='X', color='blue')
-                    score = self.minimax(0, False)
-                    self.current_moves[row][col] = Move(row, col)
-                    self.current_player = Player(label='O', color='red')
-                    if score > best_score:
-                        best_score = score
-                        move = Move(row=row, col=col, label='O')
-        return move
+    # Function to get available moves on the board
+    def available_moves(self, board):
+        moves = []
+        for row in range(board.board_size):
+            for col in range(board.board_size):
+                if board.valid_move(Move(row, col)):
+                    moves.append(Move(row, col, board.current_player.label))
+        return moves
 
+    # Function to determine the best move for the bot using minimax
+    def get_best_move(self, board):
+        best_move = None
+        best_eval = -math.inf
+        alpha = -math.inf
+        beta = math.inf
 
+        for move in self.available_moves(board):
+            board.process_move(move)
+            eval = self.minimax(board, 0, False, alpha, beta)
+            board.process_move(Move(row=move.row, col=move.col))
+            
+            if eval > best_eval:
+                best_eval = eval
+                best_move = move
+
+        return best_move
 
 
 # Defining the TicTacToe board class
@@ -248,7 +258,7 @@ class Board(tk.Tk):
                 msg = f"{self.Game.current_player.label}'s turn"
                 self.update_display(msg)
                 print(self.Game.current_moves)
-                self.BotMoveOptimal()
+                self.BotMove()
 
 
     # Generate display
@@ -333,45 +343,19 @@ class Board(tk.Tk):
             button.config(highlightbackground='lightblue')
             button.config(text='')
             button.config(fg='white')
-    
-    instructions = f'I will give you a raw code output of the status of a standard {BOARD_SIZE} by {BOARD_SIZE} Tic-Tac-Toe Game.\
-        For example, for a standard 3 by 3 tictactoe game, the formatting will be something like this to represent the first row: \
-            "[[Move(row=0, col=0, label=\'X\'), Move(row=0, col=1, label=\'O\'), Move(row=0, col=2, label=\'\')]]". \
-            From the left to the right, there is an X, followed by an O, followed by an empty (unplayed) space. \
-            Your job is to act as the other player (you will go second).\ You will take the symbol that has not been played (X or O).\
-            You may only play a move on an empty square. Your job is to win the tic-tac-toe game by connecting three of your symbol in a row. \
-            You will do this by outputting ONLY 3 things, all separated by a whitespace: `row (number), column (number), and symbol (X or O).`\
-            It does not matter if we are several moves in and there can be no winner. You must keep playing valid moves, always trying to win.'
-    
-    # Defines ChatGPT Function for playing with a robot
+
     def BotMove(self):
-        # Creating the 'question' to ask the API
-        prompt = [{"role": "system", "content": f'{Board.instructions}\
-                Here is the Raw Code output: {self.Game.current_moves}'}]
-        # Submitting API request 
-        response = openai.chat.completions.create(
-            model = 'gpt-3.5-turbo',
-            messages = prompt,
-        )
-        # Stripping the API response
-        # Assigning it into existing `row`, `col`, and `label` variables
-        bot_response = response.choices[0].message.content.strip()
-        row, col, label = bot_response.split()
-        row, col = int(row), int(col)
-        print(row, col, label)
-        move = Move(row=row, col=col, label=label)
-
-        self.Game.current_moves[row][col] = move
-        print("response received!")
-
-        # Update button in GUI for visual representation of bot's move
-        button = next(
-            button for button, (r, c) in self.cells.items() if r == row and c == col
-        )
-        self.update_button(button)
+        # Get the best move using minimax algorithm
+        move = self.Game.get_best_move(self.Game)
 
         # Process the bot's move in the game logic
         self.Game.process_move(move)
+
+        # Update button in GUI for visual representation of bot's move
+        button = next(
+            button for button, (r, c) in self.cells.items() if r == move.row and c == move.col
+        )
+        self.update_button(button)
 
         # Check game status after bot's move
         if self.Game.tied():
@@ -379,42 +363,13 @@ class Board(tk.Tk):
         elif self.Game.winner():
             msg = f'Player "{self.Game.current_player.label}" won!'
             color = self.Game.current_player.color
+
+            
             self.update_display(msg, color)
         else:
             self.Game.toggle_player()
             msg = f"{self.Game.current_player.label}'s turn"
             self.update_display(msg)
-
-    def BotMoveOptimal(self):
-        # Get the best move for the bot
-        move = self.Game.best_move()
-
-        # Make the move
-        if move:
-            row, col, label = move.row, move.col, move.label
-            print(row, col, label)
-
-            self.Game.current_moves[row][col] = move
-            print("Optimal move response received!")
-
-            # Update button in GUI for visual representation of bot's move
-            self.update_button(row, col, move)
-
-            # Process the bot's move in the game logic
-            self.Game.process_move(move)
-
-            # Check game status after bot's move
-            if self.Game.tied():
-                self.update_display(msg="Tied Game!", color="green")
-            elif self.Game.winner():
-                msg = f'Player "{self.Game.current_player.label}" won!'
-                color = self.Game.current_player.color
-                self.update_display(msg, color)
-                self.highlight_cells()
-            else:
-                self.Game.toggle_player()
-                msg = f"{self.Game.current_player.label}'s turn"
-                self.update_display(msg)
 
 
 # Defines `main()` function to create instance of Board()
