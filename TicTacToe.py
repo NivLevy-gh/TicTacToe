@@ -44,6 +44,28 @@ DEFAULT_PLAYERS = (
 
 # Define TicTacToe game class
 class Game:
+    from typing import NamedTuple
+from itertools import cycle
+
+# Define constants
+BOARD_SIZE = 3
+DEFAULT_PLAYERS = (
+    Player(label="X", color="blue"),
+    Player(label="O", color="red")
+)
+
+# Define Move and Player classes
+class Move(NamedTuple):
+    row: int
+    col: int
+    label: str = ""
+
+class Player(NamedTuple):
+    label: str
+    color: str
+
+# Define Game class
+class Game:
     def __init__(self, players=DEFAULT_PLAYERS, board_size=BOARD_SIZE):
         self.Players = cycle(players)
         self.board_size = board_size
@@ -55,102 +77,93 @@ class Game:
         self.setup_board()
     
     def setup_board(self):
-        # Creates initial list of move values
+        # Initialize the board with empty moves
         self.current_moves = [
             [Move(row, col) for col in range(self.board_size)]
             for row in range(self.board_size)
         ]
-        # Calls `get_winning_combos` and assigns value to `winning_combos`
+        # Calculate winning combinations
         self.winning_combos = self.get_winning_combos()
 
-    # Defines winning combinations on a TicTacToe board
     def get_winning_combos(self):
-        rows = [
-            [(move.row, move.col) for move in row]
-            for row in self.current_moves
+        # Generate all possible winning combinations on the board
+        rows = [[(move.row, move.col) for move in row] for row in self.current_moves]
+        columns = [[(row, col) for row in range(self.board_size)] for col in range(self.board_size)]
+        diagonals = [
+            [(i, i) for i in range(self.board_size)],
+            [(i, self.board_size - 1 - i) for i in range(self.board_size)]
         ]
-        columns = [list(col) for col in zip(*rows)]
-        first_diagonal = [row[i] for i, row in enumerate(rows)]
-        second_diagonal = [col[j] for j, col in enumerate(reversed(columns))]
-        # Returns list of all possible winning combinations
-        return rows + columns + [first_diagonal, second_diagonal]
-    
-    # Defines what a valid move is
+        return rows + columns + diagonals
+
     def valid_move(self, move):
-        # Performs check for two conditions: game not won & move not played
+        # Check if a move is valid (i.e., within board bounds and the cell is empty)
         row, col = move.row, move.col
-        move_not_played = self.current_moves[row][col].label == ""
-        no_winner = not self.has_winner
-        # Returns True or False
-        return move_not_played and no_winner
-    
-    # Defines move-processing process
+        return 0 <= row < self.board_size and 0 <= col < self.board_size and self.current_moves[row][col].label == ""
+
     def process_move(self, move):
-        # Collect row/column coordinates from input move
+        # Process a move and check for a winner
         row, col = move.row, move.col
         self.current_moves[row][col] = move
-        # Check current moves against winning combinations
+        self.check_winner()
+
+    def undo_move(self, move):
+        # Undo a move
+        row, col = move.row, move.col
+        self.current_moves[row][col] = Move(row, col)  # Reset the move back to empty
+        self.has_winner = False
+
+    def check_winner(self):
+        # Check if there's a winner after the latest move
         for combo in self.winning_combos:
-            results = set(
-                self.current_moves[n][m].label
-                for n, m in combo
-            )
-            # Tests for both conditions to be true
-            is_win = (len(results) == 1) and ("" not in results)
-            # If true, then `has_winner` becomes True, the function ends
-            if is_win:
+            labels = [self.current_moves[row][col].label for row, col in combo]
+            if all(label == labels[0] and label for label in labels):
                 self.has_winner = True
                 self.winner_combo = combo
-                break
-    
-    def undo_move(self, move):
-        # Undo moves
-        row, col = move.row, move.col
-        self.current_moves[row][col] = Move(row, col)
+                return
 
-    # Defines and returns `has_winner` Boolean
     def winner(self):
+        # Return True if there's a winner
         return self.has_winner
 
-    # Defines conditions for a tied game
     def tied(self):
-        no_winner = not self.has_winner
-        # Define a list of all the played moves
-        played_moves = (
-            move.label for row in self.current_moves for move in row
-        )
-        # Returns two Booleans to see if game is tied
-        return no_winner and all(played_moves)
-    
-    # Defines player turn-toggler
+        # Check if the game is tied (all cells filled and no winner)
+        for row in self.current_moves:
+            for move in row:
+                if move.label == "":
+                    return False
+        return not self.has_winner
+
     def toggle_player(self):
-        # Switches to next player
+        # Switch to the next player
         self.current_player = next(self.Players)
 
-    # Define reset game function
     def reset_game(self):
-        # Resets all played moves to empty objects
-        for row, row_content in enumerate(self.current_moves):
-            for col, _ in enumerate(row_content):
-                row_content[col] = Move(row, col)
-        # Reset `has winner` Boolean to False
+        # Reset the game state
+        self.current_moves = [
+            [Move(row, col) for col in range(self.board_size)]
+            for row in range(self.board_size)
+        ]
         self.has_winner = False
-        # Reset played X/O's, winner of previous match goes first
         self.winner_combo = []
+        self.current_player = next(self.Players)
+        self.winning_combos = self.get_winning_combos()
 
     def minimax(self, board, depth, maximizing_player, alpha, beta):
         if board.winner():
-            return -1 if maximizing_player else 1
+            return 1 if maximizing_player else -1
         elif board.tied():
             return 0
+        print("evaluating..")
         
         if maximizing_player:
             max_eval = -math.inf
             for move in self.available_moves(board):
                 board.process_move(move)
                 eval = self.minimax(board, depth + 1, False, alpha, beta)
-                board.process_move(Move(row=move.row, col=move.col))
+                print(eval)
+                board.undo_move(move)
                 max_eval = max(max_eval, eval)
+                
                 alpha = max(alpha, eval)
                 if beta <= alpha:
                     break
@@ -160,7 +173,7 @@ class Game:
             for move in self.available_moves(board):
                 board.process_move(move)
                 eval = self.minimax(board, depth + 1, True, alpha, beta)
-                board.process_move(Move(row=move.row, col=move.col))
+                board.undo_move(move)
                 min_eval = min(min_eval, eval)
                 beta = min(beta, eval)
                 if beta <= alpha:
@@ -174,6 +187,7 @@ class Game:
             for col in range(board.board_size):
                 if board.valid_move(Move(row, col)):
                     moves.append(Move(row, col, board.current_player.label))
+        print(f'Available moves: {moves}')
         return moves
 
     # Function to determine the best move for the bot using minimax
@@ -183,16 +197,26 @@ class Game:
         alpha = -math.inf
         beta = math.inf
 
+         # Get current player from cycle
+        opponent = next(self.Players)  # Get opponent from cycle
+        opponent_label = opponent.label
+
         for move in self.available_moves(board):
             board.process_move(move)
-            eval = self.minimax(board, 0, False, alpha, beta)
-            board.process_move(Move(row=move.row, col=move.col))
+            eval = self.minimax(board, 1, True, alpha, beta)
+            board.undo_move(move)
             
+            # Check if this move is blocking the opponent from winning
             if eval > best_eval:
+                # Check if opponent can win in the next move, if so, block it
+                board.process_move(Move(move.row, move.col, self.current_player.label))
+                board.undo_move(Move(move.row, move.col, opponent_label))
                 best_eval = eval
                 best_move = move
-
+        
+        print(best_move, eval)
         return best_move
+    
 
 
 # Defining the TicTacToe board class
@@ -367,6 +391,7 @@ class Board(tk.Tk):
             
             self.update_display(msg, color)
         else:
+            self.Game.toggle_player()
             self.Game.toggle_player()
             msg = f"{self.Game.current_player.label}'s turn"
             self.update_display(msg)
