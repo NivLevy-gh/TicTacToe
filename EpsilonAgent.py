@@ -68,17 +68,12 @@ class TicTacToe:
     def LLMmove(self):
         self.update_display("LLM is thinking...")
         available_moves = self.available_moves()
-        print(available_moves)
 
         if self.current_winner is None:
             prompt = f'{self.validprompt} {self.instructions} Here is the available moves list: {available_moves}'
-            print(prompt)
             response = model.generate_content(f'{prompt}').text.split()
-            print(response)
             if int(response[0]) in available_moves:
                 i, j = int(response[0]) // 3, int(response[0]) % 3
-                print(f"Gemini move: {response[0]}")
-                print(f"Processed response {i,j}")
                 self.update_display("LLM has made a move.")
                 self.on_button_click(i, j)
                 self.validprompt = ''
@@ -99,7 +94,6 @@ class TicTacToe:
                 self.current_winner = self.bot
                 messagebox.showinfo("Tic Tac Toe", "Bot wins!")
                 self.update_display("Bot wins!")
-        print(f"bot move: {move}")
         self.root.after(1000, self.LLMmove)
         self.update_display("Bot has made a move.")
 
